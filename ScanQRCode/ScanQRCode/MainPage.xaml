@@ -5,9 +5,46 @@
     xmlns:local="using:ScanQRCode"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    mc:Ignorable="d">
+    mc:Ignorable="d" SizeChanged="Page_SizeChanged">
 
-    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
-
+    <Grid Background="#FF1D1D1D">
+        <Grid>
+            <CaptureElement x:Name="PreviewControl" Visibility="Collapsed"  VerticalAlignment="Stretch" HorizontalAlignment="Stretch" Stretch="Fill" />
+            <Grid IsHitTestVisible="False">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid Opacity="0.2" Background="LightGray" Grid.ColumnSpan="3"></Grid>
+                <Grid Opacity="0.2" Background="LightGray" Grid.Row="1"></Grid>
+                <Grid Opacity="0.2" Background="LightGray" Grid.Row="1" Grid.Column="2"></Grid>
+                <Grid Opacity="0.2" Background="LightGray" Grid.Row="2"  Grid.ColumnSpan="3"></Grid>
+                <Grid x:Name="scanGrid" Grid.Row="1" Grid.Column="1" Opacity="1">
+                    <Grid.Resources>
+                        <Storyboard x:Name="scanStoryboard">
+                            <DoubleAnimation x:Name="scanAnimation"
+                                Storyboard.TargetName="scanLine"
+                                Storyboard.TargetProperty="(Canvas.Top)"
+                                Duration="0:0:2"
+                                To="300"
+                                RepeatBehavior="Forever"/>
+                        </Storyboard>
+                    </Grid.Resources>
+                    <Border x:Name="leftTopBorder" HorizontalAlignment="Left" VerticalAlignment="Top"  BorderBrush="White" />
+                    <Border x:Name="rightTopBorder" HorizontalAlignment="Right" VerticalAlignment="Top"  BorderBrush="White" />
+                    <Border x:Name="leftBottomBorder" HorizontalAlignment="Left" VerticalAlignment="Bottom"  BorderBrush="White" />
+                    <Border x:Name="rightBottomBorder" HorizontalAlignment="Right" VerticalAlignment="Bottom"  BorderBrush="White" />
+                    <Canvas x:Name="scanCavas" Margin="10">
+                        <Line Name="scanLine" X1="0" Y1="0" Y2="0" Stroke="Red" StrokeThickness="3" />
+                    </Canvas>
+                </Grid>
+            </Grid>
+        </Grid>
     </Grid>
 </Page>
