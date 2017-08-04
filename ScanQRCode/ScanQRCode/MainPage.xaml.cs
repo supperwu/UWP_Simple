@@ -166,6 +166,12 @@ namespace ScanQRCode
                 {
                     await mediaCapture.InitializeAsync(settings);
                     var imageEnCodingProperties = ImageEncodingProperties.CreatePng();
+                    var resolution = await SetResolutionAsync(MediaStreamType.Photo);
+                    if (resolution != null)
+                    {
+                        imageEnCodingProperties.Width = resolution[0];
+                        imageEnCodingProperties.Height = resolution[1];
+                    }
                     lowLagPhotoCapture = await mediaCapture.PrepareLowLagPhotoCaptureAsync(imageEnCodingProperties);
                     isInitialized = true;
                 }
@@ -184,6 +190,63 @@ namespace ScanQRCode
                     await StartPreviewAsync();
                 }
             }
+        }
+
+        uint desiredWidth = 1920;
+        uint desiredHeight = 1080;
+
+        /// <summary>
+        /// Set desired resolution to video device controller with specified stream type.
+        /// </summary>
+        /// <param name="streamType"></param>
+        /// <returns></returns>
+        private async Task<uint[]> SetResolutionAsync(MediaStreamType streamType)
+        {
+            //Get the supported encoding properties. 
+            var mediaStreamProperties = mediaCapture.VideoDeviceController.GetAvailableMediaStreamProperties(streamType);
+            if (mediaStreamProperties == null || mediaStreamProperties.Count == 0)
+                return null;
+
+            var imageEncodingProperty = mediaStreamProperties.Select(e => e as ImageEncodingProperties)
+                                                             .Where(e => e != null && e.Width <= desiredWidth
+                                                                        && e.Height < desiredHeight && IsMatchingRatio(e))
+                                                             .OrderByDescending(e => e.Width * e.Height)
+                                                             .FirstOrDefault();
+            if (imageEncodingProperty != null)
+            {
+                await mediaCapture.VideoDeviceController.SetMediaStreamPropertiesAsync(streamType, imageEncodingProperty);
+                return new uint[] { imageEncodingProperty.Width, imageEncodingProperty.Height };
+            }
+
+            var videoEncodingProperty = mediaStreamProperties.Select(e => e as VideoEncodingProperties)
+                                                           .Where(e => e != null && e.Width <= desiredWidth
+                                                                      && e.Height < desiredHeight && IsMatchingRatio(e))
+                                                           .OrderByDescending(e => e.Width * e.Height)
+                                                           .FirstOrDefault();
+            if (videoEncodingProperty != null)
+            {
+                await mediaCapture.VideoDeviceController.SetMediaStreamPropertiesAsync(streamType, videoEncodingProperty);
+                return new uint[] { videoEncodingProperty.Width, videoEncodingProperty.Height };
+            }
+
+            return null;
+        }
+
+        private bool IsMatchingRatio(ImageEncodingProperties e)
+        {
+            double tolerance = 0.015;
+            return Math.Abs(GetAspectRatio(e.Height, e.Width) - GetAspectRatio(desiredHeight, desiredWidth)) < tolerance;
+        }
+
+        private bool IsMatchingRatio(VideoEncodingProperties e)
+        {
+            double tolerance = 0.015;
+            return Math.Abs(GetAspectRatio(e.Height, e.Width) - GetAspectRatio(desiredHeight, desiredWidth)) < tolerance;
+        }
+
+        private double GetAspectRatio(uint heiht, uint width)
+        {
+            return Math.Round((heiht != 0) ? (width / (double)heiht) : double.NaN, 2);
         }
 
         /// <summary>
