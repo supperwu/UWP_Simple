@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Windows.ApplicationModel;
 using Windows.Devices.Enumeration;
 using Windows.Media.Capture;
+using Windows.Media.MediaProperties;
 using Windows.System.Display;
 using Windows.UI.Core;
 using Windows.UI.Popups;
@@ -28,6 +29,8 @@ namespace ScanQRCode
 
         // Prevent the screen from sleeping while the camera is running.
         private readonly DisplayRequest displayRequest = new DisplayRequest();
+
+        private LowLagPhotoCapture lowLagPhotoCapture;
 
         public MainPage()
         {
@@ -162,6 +165,8 @@ namespace ScanQRCode
                 try
                 {
                     await mediaCapture.InitializeAsync(settings);
+                    var imageEnCodingProperties = ImageEncodingProperties.CreatePng();
+                    lowLagPhotoCapture = await mediaCapture.PrepareLowLagPhotoCaptureAsync(imageEnCodingProperties);
                     isInitialized = true;
                 }
                 catch (UnauthorizedAccessException)
