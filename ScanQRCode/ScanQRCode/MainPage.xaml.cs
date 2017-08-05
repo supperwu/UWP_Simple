@@ -76,6 +76,8 @@ namespace ScanQRCode
             }
         }
 
+        double focusRecLength = 0d;
+
         private void InitFocusRec()
         {
             leftTopBorder.BorderThickness = new Thickness(borderThickness, borderThickness, 0, 0);
@@ -89,13 +91,13 @@ namespace ScanQRCode
             leftBottomBorder.Width = leftBottomBorder.Height = borderLength;
             rightBottomBorder.Width = rightBottomBorder.Height = borderLength;
 
-            var focusRecLength = Math.Min(ActualWidth / 2, ActualHeight / 2);
+            focusRecLength = Math.Min(ActualWidth / 3, ActualHeight / 3);
             scanGrid.Width = scanGrid.Height = focusRecLength;
             scanCavas.Width = scanCavas.Height = focusRecLength;
 
             scanStoryboard.Stop();
             scanLine.X2 = scanCavas.Width - 20;
-            scanAnimation.To = scanCavas.Height;
+            scanAnimation.To = scanCavas.Height - 20;
 
             scanStoryboard.Begin();
         }
@@ -108,6 +110,11 @@ namespace ScanQRCode
         protected override async void OnNavigatedTo(NavigationEventArgs e)
         {
             await StartCameraAsync();
+        }
+
+        protected override async void OnNavigatedFrom(NavigationEventArgs e)
+        {
+            await CleanupCameraAsync();
         }
 
         private async Task StartCameraAsync()
@@ -291,28 +298,35 @@ namespace ScanQRCode
                     {
                         continue;
                     }
-
-
-                    // initialize with 1,1 to get the current size of the image
-                    var writeableBitmap = new WriteableBitmap(1, 1);
                     using (var stream = capturedPhoto.Frame.CloneStream())
                     {
-                        await writeableBitmap.SetSourceAsync(stream);
+                        //calculate the crop square's length.
+                        var pixelWidth = capturedPhoto.Frame.Width;
+                        var pixelHeight = capturedPhoto.Frame.Height;
+                        var rate = Math.Min(pixelWidth, pixelHeight) / Math.Min(ActualWidth, ActualHeight);
+                        var cropLength = focusRecLength * rate;
 
-                        // and create it again because otherwise the WB isn't fully initialized and decoding
-                        // results in a IndexOutOfRange
-                        writeableBitmap = new WriteableBitmap((int)capturedPhoto.Frame.Width, (int)capturedPhoto.Frame.Height);
-                        stream.Seek(0);
-                        await writeableBitmap.SetSourceAsync(stream);
+                        // initialize with 1,1 to get the current size of the image
+                        var writeableBmp = new WriteableBitmap(1, 1);
+                        var rect = new Rect(pixelWidth / 2 - cropLength / 2,
+                            pixelHeight / 2 - cropLength / 2, cropLength, cropLength);
+                        using (var croppedStream = await ImageHelper.GetCroppedStreamAsync(stream, rect))
+                        {
+                            writeableBmp.SetSource(croppedStream);
+                            // and create it again because otherwise the WB isn't fully initialized and decoding
+                            // results in a IndexOutOfRange
+                            writeableBmp = new WriteableBitmap((int)cropLength, (int)cropLength);
+                            croppedStream.Seek(0);
+                            await writeableBmp.SetSourceAsync(croppedStream);
+                        }
+
+                        _result = ScanBitmap(writeableBmp);
                     }
-
-                    _result = ScanBitmap(writeableBitmap);
                 }
 
                 if (_result != null)
                 {
-                    await lowLagPhotoCapture.FinishAsync();
-                        
+                    Frame.Navigate(typeof(ResultPage), _result.Text);
                 }
             }
             catch (Exception ex)
@@ -350,6 +364,12 @@ namespace ScanQRCode
         {
             if (isInitialized)
             {
+                if (lowLagPhotoCapture != null)
+                {
+                    await lowLagPhotoCapture.FinishAsync();
+                    lowLagPhotoCapture = null;
+                }
+
                 if (isPreviewing)
                 {
                     // The call to stop the preview is included here for completeness, but can be
