@@ -1,8 +1,10 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using Windows.ApplicationModel;
 using Windows.Devices.Enumeration;
+using Windows.Foundation;
 using Windows.Media.Capture;
 using Windows.Media.MediaProperties;
 using Windows.System.Display;
@@ -10,8 +12,9 @@ using Windows.UI.Core;
 using Windows.UI.Popups;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Media.Imaging;
 using Windows.UI.Xaml.Navigation;
-
+using ZXing;
 // The Blank Page item template is documented at http://go.microsoft.com/fwlink/?LinkId=402352&clcid=0x409
 
 namespace ScanQRCode
@@ -117,6 +120,11 @@ namespace ScanQRCode
             if (isInitialized)
             {
                 PreviewControl.Visibility = Visibility.Visible;
+            }
+
+            if (isPreviewing)
+            {
+                await StartScanQRCode();
             }
         }
 
@@ -271,6 +279,58 @@ namespace ScanQRCode
             }
         }
 
+        private async Task StartScanQRCode()
+        {
+            try
+            {
+                Result _result = null;
+                while (_result == null && lowLagPhotoCapture != null)
+                {
+                    var capturedPhoto = await lowLagPhotoCapture.CaptureAsync();
+                    if (capturedPhoto == null)
+                    {
+                        continue;
+                    }
+
+
+                    // initialize with 1,1 to get the current size of the image
+                    var writeableBitmap = new WriteableBitmap(1, 1);
+                    using (var stream = capturedPhoto.Frame.CloneStream())
+                    {
+                        await writeableBitmap.SetSourceAsync(stream);
+
+                        // and create it again because otherwise the WB isn't fully initialized and decoding
+                        // results in a IndexOutOfRange
+                        writeableBitmap = new WriteableBitmap((int)capturedPhoto.Frame.Width, (int)capturedPhoto.Frame.Height);
+                        stream.Seek(0);
+                        await writeableBitmap.SetSourceAsync(stream);
+                    }
+
+                    _result = ScanBitmap(writeableBitmap);
+                }
+
+                if (_result != null)
+                {
+                    await lowLagPhotoCapture.FinishAsync();
+                        
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Exception when scaning QR code" + ex.Message);
+            }
+        }
+
+        private Result ScanBitmap(WriteableBitmap writeableBmp)
+        {
+            var barcodeReader = new BarcodeReader
+            {
+                AutoRotate = true,
+                Options = { TryHarder = true }
+            };
+
+            return barcodeReader.Decode(writeableBmp);
+        }
 
         /// <summary>
         /// Handles MediaCapture failures. Cleans up the camera resources.
