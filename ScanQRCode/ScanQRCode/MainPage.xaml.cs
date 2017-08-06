@@ -35,6 +35,13 @@ namespace ScanQRCode
 
         private LowLagPhotoCapture lowLagPhotoCapture;
 
+        // UI state
+        private bool _isSuspending;
+        private bool _isActivePage;
+        private bool _isUIActive;
+        private Task _setupTask = Task.CompletedTask;
+
+
         public MainPage()
         {
             this.InitializeComponent();
@@ -42,6 +49,8 @@ namespace ScanQRCode
             // Useful to know when to initialize/clean up the camera
             Application.Current.Suspending += Application_Suspending;
             Application.Current.Resuming += Application_Resuming;
+
+            Window.Current.VisibilityChanged += Current_VisibilityChanged;
         }
 
         /// <summary>
@@ -49,16 +58,20 @@ namespace ScanQRCode
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private async void Application_Suspending(object sender, SuspendingEventArgs e)
+        private void Application_Suspending(object sender, SuspendingEventArgs e)
         {
             // Handle global application events only if this page is active.
             if (Frame.CurrentSourcePageType == typeof(MainPage))
             {
+                _isSuspending = true;
                 var deferral = e.SuspendingOperation.GetDeferral();
 
-                await CleanupCameraAsync();
+                var task = Dispatcher.RunAsync(CoreDispatcherPriority.High, async () =>
+                {
+                    await SwitchCameraOnUIStateChanged();
+                    deferral.Complete();
+                });
 
-                deferral.Complete();
             }
         }
 
@@ -72,9 +85,19 @@ namespace ScanQRCode
             // Handle global application events only if this page is active
             if (Frame.CurrentSourcePageType == typeof(MainPage))
             {
-                await StartCameraAsync();
+                _isSuspending = false;
+                var task = Dispatcher.RunAsync(CoreDispatcherPriority.High, async () =>
+                {
+                    await SwitchCameraOnUIStateChanged();
+                });
             }
         }
+
+        private async void Current_VisibilityChanged(object sender, VisibilityChangedEventArgs e)
+        {
+            await SwitchCameraOnUIStateChanged();
+        }
+
 
         double focusRecLength = 0d;
 
@@ -109,12 +132,14 @@ namespace ScanQRCode
 
         protected override async void OnNavigatedTo(NavigationEventArgs e)
         {
-            await StartCameraAsync();
+            _isActivePage = true;
+            await SwitchCameraOnUIStateChanged();
         }
 
         protected override async void OnNavigatedFrom(NavigationEventArgs e)
         {
-            await CleanupCameraAsync();
+            _isActivePage = false;
+            await SwitchCameraOnUIStateChanged();
         }
 
         private async Task StartCameraAsync()
@@ -131,8 +156,55 @@ namespace ScanQRCode
 
             if (isPreviewing)
             {
+                Debug.WriteLine("Camera has been started");
                 await StartScanQRCode();
             }
+        }
+
+        /// <summary>
+        /// Initialize or clean up the camera and our UI,
+        /// depending on the page state.
+        /// </summary>
+        /// <returns></returns>
+        private async Task SwitchCameraOnUIStateChanged()
+        {
+            // Avoid reentrancy: Wait until nobody else is in this function.
+            while (!_setupTask.IsCompleted)
+            {
+                await _setupTask;
+            }
+
+            if (_isUIActive != IsCurrentUIActive)
+            {
+                _isUIActive = IsCurrentUIActive;
+
+                Func<Task> setupAsync = async () =>
+                {
+                    if (IsCurrentUIActive)
+                    {
+                        await StartCameraAsync();
+                    }
+                    else
+                    {
+                        await CleanupCameraAsync();
+                    }
+                };
+                _setupTask = setupAsync();
+            }
+
+            await _setupTask;
+        }
+
+        /// <summary>
+        /// Gets current ui active state.
+        /// </summary>s
+        private bool IsCurrentUIActive
+        {
+            // UI is active if
+            // * We are the current active page.
+            // * The window is visible.
+            // * The app is not suspending.
+            get { return _isActivePage && !_isSuspending && Window.Current.Visible; }
         }
 
         /// <summary>
@@ -291,7 +363,7 @@ namespace ScanQRCode
             try
             {
                 Result _result = null;
-                while (_result == null && lowLagPhotoCapture != null)
+                while (_result == null && lowLagPhotoCapture != null && IsCurrentUIActive)
                 {
                     var capturedPhoto = await lowLagPhotoCapture.CaptureAsync();
                     if (capturedPhoto == null)
@@ -387,6 +459,8 @@ namespace ScanQRCode
                 mediaCapture.Dispose();
                 mediaCapture = null;
             }
+
+            Debug.WriteLine("Camera has been cleanup");
         }
 
         /// <summary>
